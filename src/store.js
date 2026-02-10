@@ -11,9 +11,27 @@ function ensure() {
   }
 }
 
+function normalizeStore(raw) {
+  if (!raw || typeof raw !== "object") {
+    return { humans: {}, tags: {} };
+  }
+
+  return {
+    humans: raw.humans && typeof raw.humans === "object" ? raw.humans : {},
+    tags: raw.tags && typeof raw.tags === "object" ? raw.tags : {}
+  };
+}
+
 export function loadStore() {
   ensure();
-  return JSON.parse(fs.readFileSync(STORE_FILE, "utf-8"));
+  try {
+    const content = fs.readFileSync(STORE_FILE, "utf-8");
+    return normalizeStore(JSON.parse(content));
+  } catch {
+    const fallback = { humans: {}, tags: {} };
+    fs.writeFileSync(STORE_FILE, JSON.stringify(fallback, null, 2));
+    return fallback;
+  }
 }
 
 export function saveStore(store) {
@@ -42,5 +60,5 @@ export function setTag(jid, tag) {
 
 export function getTag(jid) {
   const store = loadStore();
-  return loadStore().tags[jid] || null;
+  return store.tags[jid] || null;
 }
