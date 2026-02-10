@@ -1,4 +1,12 @@
-import "dotenv/config";
+await import("dotenv/config").catch((err) => {
+  if (err?.code === "ERR_MODULE_NOT_FOUND" && String(err?.message || "").includes("dotenv")) {
+    console.warn("⚠️ Pacote 'dotenv' não encontrado. Rode `npm install` para carregar variáveis do .env.");
+    return;
+  }
+
+  throw err;
+});
+
 import express from "express";
 import cors from "cors";
 import path from "path";
