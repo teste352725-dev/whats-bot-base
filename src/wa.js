@@ -3,6 +3,8 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   Browsers
 } from "@whiskeysockets/baileys";
+import pino from "pino";
+import qrcode from "qrcode-terminal";
 import { upsertContact, addMessage, getContact } from "./store.js";
 import { decideTenantForNewContact, getTenantConfig, triageTag } from "./triage.js";
 
@@ -15,14 +17,31 @@ export async function startWhatsApp({ onStatus }) {
     version,
     auth: state,
     browser: Browsers.ubuntu("Chrome"),
-    printQRInTerminal: true
+    logger: pino({ level: "silent" })
   });
 
   sock.ev.on("creds.update", saveCreds);
 
   sock.ev.on("connection.update", (u) => {
-    const st = u.connection === "open" ? "online" : (u.connection === "close" ? "offline" : "starting");
-    onStatus?.(st);
+    const { connection, qr } = u;
+
+    if (qr) {
+      qrcode.generate(qr, { small: true });
+      onStatus?.("qr");
+      return;
+    }
+
+    if (connection === "open") {
+      onStatus?.("online");
+      return;
+    }
+
+    if (connection === "close") {
+      onStatus?.("offline");
+      return;
+    }
+
+    onStatus?.("starting");
   });
 
   sock.ev.on("messages.upsert", async (m) => {

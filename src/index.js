@@ -13,7 +13,7 @@ app.use(cors());
 app.use(express.json());
 app.use(authMiddleware(process.env.SESSION_SECRET || "dev"));
 
-let waStatus = "starting";
+let waStatus = "starting"; // starting | qr | online | offline
 let sock = null;
 
 app.post("/api/login", login);
