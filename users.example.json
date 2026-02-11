@@ -1,0 +1,28 @@
+{
+  "users": [
+    {
+      "username": "admin",
+      "password": "admin123",
+      "role": "admin",
+      "tenants": ["efcol", "alef", "sejaprofeta"]
+    },
+    {
+      "username": "efcol.at1",
+      "password": "123",
+      "role": "agent",
+      "tenants": ["efcol"]
+    },
+    {
+      "username": "alef.at1",
+      "password": "123",
+      "role": "agent",
+      "tenants": ["alef"]
+    },
+    {
+      "username": "seja.at1",
+      "password": "123",
+      "role": "agent",
+      "tenants": ["sejaprofeta"]
+    }
+  ]
+}
