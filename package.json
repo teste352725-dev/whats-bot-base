@@ -2,17 +2,18 @@
   "name": "whats-bot-base",
   "version": "1.0.0",
   "type": "module",
-  "main": "src/index.js",
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.16",
+    "@whiskeysockets/baileys": "^6.7.9",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
+    "dotenv": "^17.2.4",
     "express": "^4.19.2",
-    "pino": "^9.4.0",
+    "express-session": "^1.17.3",
+    "pino": "^9.6.0",
     "qrcode-terminal": "^0.12.0"
   }
 }

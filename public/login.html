@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Painel • Whats Bot</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="auth">
+  <div class="auth-card">
+    <div class="brand">
+      <div class="logo">WB</div>
+      <div>
+        <h1>Painel do Atendimento</h1>
+        <p>Entre para gerenciar conversas e responder pelo bot.</p>
+      </div>
+    </div>
+
+    <form id="loginForm" class="form">
+      <label>
+        Usuário
+        <input name="user" autocomplete="username" required />
+      </label>
+
+      <label>
+        Senha
+        <input name="pass" type="password" autocomplete="current-password" required />
+      </label>
+
+      <button class="btn primary" type="submit">Entrar</button>
+      <div id="err" class="err"></div>
+    </form>
+
+    <div class="hint">
+      Dica: edite <code>.env</code> (ADMIN_USER / ADMIN_PASS).
+    </div>
+  </div>
+
+  <script type="module">
+    const form = document.getElementById("loginForm");
+    const err = document.getElementById("err");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      err.textContent = "";
+
+      const body = Object.fromEntries(new FormData(form).entries());
+
+      const r = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        credentials: "include"
+      });
+
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.ok) {
+        err.textContent = data?.error || "Falha no login";
+        return;
+      }
+
+      location.href = "/dashboard.html";
+    });
+  </script>
+</body>
+</html>
