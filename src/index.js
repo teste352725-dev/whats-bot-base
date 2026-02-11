@@ -20,9 +20,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = Number(process.env.PORT || 3333);
+const requestedPort = Number(process.env.PORT || 3333);
+const PORT = Number.isFinite(requestedPort) && requestedPort > 0 ? requestedPort : 3333;
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
 const BOT_NAME = process.env.BOT_NAME || "Bot";
+const MAX_PORT_ATTEMPTS = Math.max(1, Number(process.env.PORT_RETRY_ATTEMPTS) || 15);
 
 const allowlist = (process.env.ALLOWLIST_SEND || "")
   .split(",")
@@ -97,14 +99,54 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use("/", express.static(path.join(__dirname, "..", "public")));
 
-app.listen(PORT, async () => {
-  console.log(`✅ API rodando em http://localhost:${PORT}`);
-
-  sock = await startBot({
-    botName: BOT_NAME,
-    onConnectionUpdate: (st) => {
-      waStatus = st.status || "offline";
-      console.log("📲 WhatsApp:", waStatus);
-    }
+function listenOnPort(port) {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, () => resolve(server));
+    server.once("error", reject);
   });
-});
+}
+
+async function startHttpServer() {
+  let currentPort = PORT;
+
+  for (let attempt = 1; attempt <= MAX_PORT_ATTEMPTS; attempt += 1) {
+    try {
+      await listenOnPort(currentPort);
+      return currentPort;
+    } catch (err) {
+      if (err?.code === "EADDRINUSE") {
+        if (attempt === MAX_PORT_ATTEMPTS) {
+          throw new Error(`Porta em uso: não foi possível abrir de ${PORT} até ${currentPort}.`);
+        }
+
+        console.warn(`⚠️ Porta ${currentPort} em uso. Tentando ${currentPort + 1}...`);
+        currentPort += 1;
+        continue;
+      }
+
+      throw err;
+    }
+  }
+
+  throw new Error("Falha ao iniciar o servidor HTTP.");
+}
+
+async function bootstrap() {
+  try {
+    const activePort = await startHttpServer();
+    console.log(`✅ API rodando em http://localhost:${activePort}`);
+
+    sock = await startBot({
+      botName: BOT_NAME,
+      onConnectionUpdate: (st) => {
+        waStatus = st.status || "offline";
+        console.log("📲 WhatsApp:", waStatus);
+      }
+    });
+  } catch (err) {
+    console.error("❌ Erro ao iniciar aplicação:", err?.message || err);
+    process.exit(1);
+  }
+}
+
+bootstrap();
