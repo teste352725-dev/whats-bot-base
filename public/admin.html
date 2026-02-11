@@ -4,148 +4,100 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <link rel="stylesheet" href="/css/base.css">
-  <link id="theme" rel="stylesheet" href="/css/theme-efcol.css">
-  <title>Admin</title>
+  <title>Omnichannel Suite • Admin</title>
 </head>
-<body>
-  <div class="container">
-    <div class="header">
-      <div>
-        <h2 style="margin:0">Admin (Você)</h2>
-        <div class="badge" id="me">carregando...</div>
-      </div>
-      <div class="row" style="max-width:520px">
-        <select class="input" id="tenant"></select>
-        <button class="btn secondary" id="logout">Sair</button>
-      </div>
+<body class="theme-efcol">
+<div class="app-shell">
+  <nav class="sidebar">
+    <div class="brand"><div style="width:24px;height:24px;background:var(--primary);border-radius:4px"></div>Admin Panel</div>
+    <div class="nav-item active">📊 Visão Geral</div>
+    <div class="nav-item">👥 Equipe</div>
+    <div class="nav-item">⚙️ Configurações</div>
+    <div class="spacer"></div>
+    <div style="padding:12px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:10px">
+      <small style="color:var(--text-muted);display:block;margin-bottom:4px">Tenant Atual</small>
+      <select class="input" id="tenant" style="padding:8px;font-size:12px"></select>
     </div>
+    <button class="btn secondary" id="logout" style="width:100%">Sair</button>
+  </nav>
 
-    <div class="grid">
-      <div class="card list" id="left"></div>
+  <main class="main-content">
+    <header class="topbar">
+      <h3 style="margin:0">Visão Geral</h3>
+      <div id="me" style="font-size:13px;color:var(--text-muted)">carregando...</div>
+    </header>
 
-      <div class="card" style="display:flex; flex-direction:column;">
-        <div style="padding:12px 16px; border-bottom:1px solid var(--border)">
-          <div id="chatTitle" style="font-weight:900">Selecione uma conversa</div>
-          <div id="chatSub" class="badge" style="display:inline-block; margin-top:8px">—</div>
+    <div class="dashboard-view">
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Conversas</div><div id="stTotal" class="stat-value">0</div></div>
+        <div class="stat-card"><div class="stat-label">Tenant Atual</div><div id="stTenant" class="stat-value">-</div></div>
+        <div class="stat-card"><div class="stat-label">Selecionada</div><div id="stSel" class="stat-value">0</div></div>
+      </div>
+
+      <div class="chat-layout">
+        <div class="conversation-list">
+          <div style="padding:16px;border-bottom:1px solid var(--border)"><input class="input" id="q" placeholder="Buscar conversa..." style="padding:8px 12px;font-size:13px"></div>
+          <div id="conv-list" style="overflow-y:auto;flex:1"></div>
         </div>
 
-        <div class="chat" id="chat"></div>
-
-        <div style="padding:12px; border-top:1px solid var(--border)">
-          <div class="row">
-            <input class="input" id="agentName" placeholder="Seu nome (ex: João)" />
-            <button class="btn secondary" id="saveAgent">Salvar</button>
+        <div class="chat-window">
+          <div class="chat-header">
+            <div id="chat-title" style="font-weight:800;font-size:16px">Selecione</div>
+            <div id="chat-sub" style="color:var(--text-muted);font-size:12px;margin-top:4px">—</div>
           </div>
-          <div style="height:10px"></div>
-          <div class="row">
-            <input class="input" id="text" placeholder="Digite a mensagem..." />
-            <button class="btn" id="send">Enviar</button>
+          <div class="messages-area" id="msg-area"><div style="text-align:center;color:var(--text-muted);margin-top:50px">Selecione uma conversa para iniciar.</div></div>
+          <div class="input-area">
+            <div class="row" style="margin-bottom:8px">
+              <input class="input" id="agentName" placeholder="Seu nome (ex: João)" />
+              <button class="btn secondary" id="saveAgent">Salvar</button>
+            </div>
+            <div class="row">
+              <input class="input" id="msg-input" placeholder="Digite sua mensagem..." />
+              <button class="btn" id="send">Enviar</button>
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
+  </main>
+</div>
 
 <script>
-let current = { tenant:null, jid:null };
+let current = { tenant:null, jid:null, convs:[] };
+function setTheme(tenant){ document.body.className = `theme-${tenant}`; }
+function esc(s){ return String(s||"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+async function api(path, opts){ const r=await fetch(path,{headers:{"Content-Type":"application/json"},...opts}); const j=await r.json().catch(()=>null); if(!r.ok) throw new Error(j?.error||'Erro'); return j; }
 
-function setTheme(tenant){
-  const map = {
-    efcol: "/css/theme-efcol.css",
-    alef: "/css/theme-alef.css",
-    sejaprofeta: "/css/theme-sejaprofeta.css"
-  };
-  document.getElementById("theme").href = map[tenant] || "/css/theme-efcol.css";
+function renderConvs(){
+  const q=document.getElementById('q').value.trim().toLowerCase();
+  const list=current.convs.filter(c=>!q||(c.displayName||'').toLowerCase().includes(q)||(c.jid||'').includes(q));
+  document.getElementById('conv-list').innerHTML=list.map(c=>`<div class="list-item ${c.jid===current.jid?'active':''}" data-jid="${c.jid}"><div style="display:flex;justify-content:space-between"><strong>${esc(c.displayName)}</strong><span style="font-size:10px;color:var(--text-muted)">${new Date(c.updatedAt||Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span></div><div style="font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.lastText||'')}</div><div style="margin-top:6px"><span class="badge">${esc(c.tag||'sem triagem')}</span></div></div>`).join('');
+  document.querySelectorAll('.list-item').forEach(el=>el.onclick=async()=>{current.jid=el.dataset.jid; await loadChat(); renderConvs();});
+  document.getElementById('stTotal').textContent=String(current.convs.length);
+  document.getElementById('stTenant').textContent=(current.tenant||'-').toUpperCase();
+  document.getElementById('stSel').textContent=current.jid? '1':'0';
 }
 
-async function api(path, opts){
-  const r = await fetch(path, { headers: { "Content-Type":"application/json" }, ...opts });
-  const j = await r.json().catch(()=>null);
-  if(!r.ok) throw new Error(j?.error || "Erro");
-  return j;
-}
+async function loadConvs(){ const data=await api(`/api/conversations?tenant=${encodeURIComponent(current.tenant)}`); current.convs=data.items||[]; renderConvs(); }
+async function loadChat(){ if(!current.jid) return; const data=await api(`/api/messages?tenant=${encodeURIComponent(current.tenant)}&jid=${encodeURIComponent(current.jid)}`); document.getElementById('chat-title').textContent=data.header.displayName; document.getElementById('chat-sub').textContent=`${data.header.phone} • ${data.header.tag||'sem triagem'}`; document.getElementById('msg-area').innerHTML=(data.items||[]).map(m=>`<div class="msg ${m.from==='agent'?'agent':'client'}"><div>${esc(m.text||'')}</div><span style="font-size:10px;opacity:.7;display:block;text-align:right;margin-top:4px">${new Date(m.ts||Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span></div>`).join(''); document.getElementById('msg-area').scrollTop=999999; }
 
 async function boot(){
-  const me = await api("/api/me");
-  document.getElementById("me").textContent = `${me.username} • ${me.role}`;
-  const sel = document.getElementById("tenant");
-  sel.innerHTML = me.tenants.map(t => `<option value="${t}">${t.toUpperCase()}</option>`).join("");
-  current.tenant = sel.value;
+  const me=await api('/api/me');
+  document.getElementById('me').textContent=`${me.username} • ${me.role}`;
+  const sel=document.getElementById('tenant');
+  sel.innerHTML=(me.tenants||[]).map(t=>`<option value="${t}">${t.toUpperCase()}</option>`).join('');
+  current.tenant=sel.value;
   setTheme(current.tenant);
-  sel.onchange = async () => {
-    current.tenant = sel.value;
-    current.jid = null;
-    setTheme(current.tenant);
-    await loadConvos();
-    document.getElementById("chat").innerHTML = "";
-    document.getElementById("chatTitle").textContent = "Selecione uma conversa";
-  };
-  await loadConvos();
-  setInterval(loadConvos, 2500);
-  setInterval(()=> current.jid && loadChat(), 2000);
+  sel.onchange=async()=>{current.tenant=sel.value; current.jid=null; setTheme(current.tenant); await loadConvs(); document.getElementById('msg-area').innerHTML=''; document.getElementById('chat-title').textContent='Selecione'; document.getElementById('chat-sub').textContent='—';};
+  document.getElementById('q').oninput=renderConvs;
+  document.getElementById('saveAgent').onclick=async()=>{const name=document.getElementById('agentName').value.trim(); if(!name) return alert('Digite seu nome.'); await api('/api/agent-name',{method:'POST', body:JSON.stringify({name})}); alert('Nome salvo.');};
+  document.getElementById('send').onclick=async()=>{if(!current.jid) return alert('Selecione uma conversa.'); const text=document.getElementById('msg-input').value.trim(); if(!text) return; await api('/api/send',{method:'POST', body:JSON.stringify({tenant:current.tenant, jid:current.jid, text})}); document.getElementById('msg-input').value=''; await loadChat(); await loadConvs();};
+  document.getElementById('msg-input').onkeypress=(e)=>{if(e.key==='Enter') document.getElementById('send').click();};
+  document.getElementById('logout').onclick=async()=>{await api('/api/logout',{method:'POST'}); location.href='/login.html';};
+  await loadConvs();
+  setInterval(loadConvs,2500);
+  setInterval(()=>current.jid&&loadChat(),2000);
 }
-
-function renderMsg(m){
-  const who = m.from === "agent" ? (m.agentName || "Atendente") : (m.contactName || "Cliente");
-  const time = new Date(m.ts).toLocaleString();
-  return `
-    <div class="msg">
-      <div class="who">${escapeHtml(who)}</div>
-      <div>${escapeHtml(m.text)}</div>
-      <div class="meta">${escapeHtml(m.from)} • ${time}</div>
-    </div>`;
-}
-
-function escapeHtml(s){ return String(s||"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-
-async function loadConvos(){
-  const left = document.getElementById("left");
-  const data = await api(`/api/conversations?tenant=${encodeURIComponent(current.tenant)}`);
-  left.innerHTML = data.items.map(c => `
-    <div class="item ${c.jid===current.jid?'active':''}" data-jid="${c.jid}">
-      <div style="font-weight:800">${escapeHtml(c.displayName)}</div>
-      <div style="color:var(--muted); font-size:12px">${escapeHtml(c.lastText || "")}</div>
-      <div style="margin-top:8px" class="badge">${escapeHtml(c.tag || "sem triagem")}</div>
-    </div>
-  `).join("");
-
-  left.querySelectorAll(".item").forEach(el=>{
-    el.onclick = async () => {
-      current.jid = el.dataset.jid;
-      await loadChat();
-    };
-  });
-}
-
-async function loadChat(){
-  const data = await api(`/api/messages?tenant=${encodeURIComponent(current.tenant)}&jid=${encodeURIComponent(current.jid)}`);
-  document.getElementById("chatTitle").textContent = data.header.displayName;
-  document.getElementById("chatSub").textContent = `${data.header.phone} • ${data.header.tag || "sem triagem"}`;
-  document.getElementById("chat").innerHTML = data.items.map(renderMsg).join("");
-  document.getElementById("chat").scrollTop = 999999;
-}
-
-document.getElementById("saveAgent").onclick = async () => {
-  const name = document.getElementById("agentName").value.trim();
-  if(!name) return alert("Digite seu nome.");
-  await api("/api/agent-name", { method:"POST", body: JSON.stringify({ name }) });
-  alert("Nome salvo.");
-};
-
-document.getElementById("send").onclick = async () => {
-  if(!current.jid) return alert("Selecione uma conversa.");
-  const text = document.getElementById("text").value.trim();
-  if(!text) return;
-  await api("/api/send", { method:"POST", body: JSON.stringify({ tenant: current.tenant, jid: current.jid, text }) });
-  document.getElementById("text").value = "";
-  await loadChat();
-};
-
-document.getElementById("logout").onclick = async () => {
-  await api("/api/logout", { method:"POST" });
-  location.href = "/login.html";
-};
-
 boot().catch(e=>alert(e.message));
 </script>
 </body>
