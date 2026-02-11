@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="/css/base.css">
+  <title>Entrar</title>
+</head>
+<body>
+  <div class="container">
+    <div class="card" style="padding:22px; max-width:420px; margin: 10vh auto;">
+      <div class="header">
+        <h2 style="margin:0">Painel do Bot</h2>
+        <span class="badge">WhatsApp + Triagem</span>
+      </div>
+
+      <label>Usuário</label>
+      <input class="input" id="u" placeholder="ex: efcol.at1" />
+
+      <div style="height:10px"></div>
+
+      <label>Senha</label>
+      <input class="input" id="p" type="password" placeholder="••••••" />
+
+      <div style="height:14px"></div>
+
+      <button class="btn" id="login">Entrar</button>
+      <p id="err" style="color:#ff6b6b; margin-top:12px"></p>
+    </div>
+  </div>
+
+<script>
+async function api(path, opts){
+  const r = await fetch(path, { headers: { "Content-Type":"application/json" }, ...opts });
+  const j = await r.json().catch(()=>null);
+  if(!r.ok) throw new Error(j?.error || "Erro");
+  return j;
+}
+
+document.getElementById("login").onclick = async () => {
+  const username = document.getElementById("u").value.trim();
+  const password = document.getElementById("p").value.trim();
+  try{
+    const res = await api("/api/login", { method:"POST", body: JSON.stringify({ username, password }) });
+    if(res.role === "admin") location.href = "/admin.html";
+    else location.href = "/dashboard.html";
+  }catch(e){
+    document.getElementById("err").textContent = e.message;
+  }
+};
+</script>
+</body>
+</html>

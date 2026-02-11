@@ -4,98 +4,87 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { startBot } from "./bot.js";
-import { createQueue } from "./queue.js";
-import { setHumanMode, isHumanMode } from "./store.js";
+import { authMiddleware, login, logout, requireAuth } from "./auth.js";
+import { startWhatsApp } from "./wa.js";
+import { listConversations, getConversation, addMessage, getAgentName, setAgentName } from "./store.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(authMiddleware(process.env.SESSION_SECRET || "dev"));
 
-const PORT = Number(process.env.PORT || 3333);
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
-const BOT_NAME = process.env.BOT_NAME || "Bot";
+let waStatus = "starting";
+let sock = null;
 
-const allowlist = (process.env.ALLOWLIST_SEND || "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+app.post("/api/login", login);
+app.post("/api/logout", logout);
 
-const queue = createQueue({
-  minDelayMs: process.env.MIN_DELAY_MS,
-  maxDelayMs: process.env.MAX_DELAY_MS,
-  maxPerMinute: process.env.MAX_PER_MINUTE
+app.get("/api/me", requireAuth, (req, res) => {
+  res.json({ ok: true, ...req.user });
 });
 
-let sock = null;
-let waStatus = "starting"; // starting | qr | online | offline
-
-function requireAdmin(req, res, next) {
-  const auth = req.headers.authorization || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (!ADMIN_TOKEN || token !== ADMIN_TOKEN) {
-    return res.status(401).json({ ok: false, error: "unauthorized" });
-  }
-  next();
-}
+app.post("/api/agent-name", requireAuth, (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  if (!name) return res.status(400).json({ ok: false, error: "name required" });
+  setAgentName(req.user.username, name);
+  res.json({ ok: true });
+});
 
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true, waStatus, queue: queue.size() });
+  res.json({ ok: true, waStatus });
 });
 
-app.get("/api/status", (req, res) => {
-  res.json({ ok: true, message: "Backend online 🚀", waStatus });
+app.get("/api/conversations", requireAuth, (req, res) => {
+  const tenant = String(req.query.tenant || "");
+  if (!tenant) return res.status(400).json({ ok: false, error: "tenant required" });
+  if (!req.user.tenants?.includes(tenant)) return res.status(403).json({ ok: false, error: "forbidden" });
+
+  res.json({ ok: true, items: listConversations(tenant) });
 });
 
-app.post("/api/human-mode", requireAdmin, (req, res) => {
-  const { jid, enabled } = req.body || {};
-  if (!jid) return res.status(400).json({ ok: false, error: "jid required" });
-  const value = setHumanMode(jid, !!enabled);
-  res.json({ ok: true, jid, humanMode: value });
+app.get("/api/messages", requireAuth, (req, res) => {
+  const tenant = String(req.query.tenant || "");
+  const jid = String(req.query.jid || "");
+  if (!tenant || !jid) return res.status(400).json({ ok: false, error: "tenant and jid required" });
+  if (!req.user.tenants?.includes(tenant)) return res.status(403).json({ ok: false, error: "forbidden" });
+
+  res.json({ ok: true, ...getConversation(tenant, jid) });
 });
 
-app.get("/api/human-mode", requireAdmin, (req, res) => {
-  const jid = req.query.jid;
-  if (!jid) return res.status(400).json({ ok: false, error: "jid required" });
-  res.json({ ok: true, jid, humanMode: isHumanMode(String(jid)) });
-});
+app.post("/api/send", requireAuth, async (req, res) => {
+  const { tenant, jid, text } = req.body || {};
+  if (!tenant || !jid || !text) return res.status(400).json({ ok: false, error: "tenant, jid, text required" });
+  if (!req.user.tenants?.includes(tenant)) return res.status(403).json({ ok: false, error: "forbidden" });
+  if (!sock) return res.status(503).json({ ok: false, error: "whatsapp offline" });
 
-app.post("/api/send", requireAdmin, (req, res) => {
-  const { to, text } = req.body || {};
-  if (!to || !text) return res.status(400).json({ ok: false, error: "to and text required" });
+  const agentName = getAgentName(req.user.username) || req.user.username;
 
-  // Normaliza: usuário manda 5527... e vira jid
-  const digits = String(to).replace(/\D/g, "");
-  if (!digits) return res.status(400).json({ ok: false, error: "invalid to" });
-
-  // allowlist (evita “disparo geral”)
-  if (allowlist.length && !allowlist.includes(digits)) {
-    return res.status(403).json({ ok: false, error: "number not in allowlist_send" });
-  }
-
-  const jid = `${digits}@s.whatsapp.net`;
-
-  if (!sock) return res.status(503).json({ ok: false, error: "whatsapp not ready" });
-
-  queue.push(async () => {
-    await sock.sendMessage(jid, { text: String(text) });
+  addMessage({
+    tenant,
+    jid,
+    msg: {
+      from: "agent",
+      text: String(text),
+      ts: Date.now(),
+      agentName
+    }
   });
 
-  res.json({ ok: true, queued: true, jid });
+  await sock.sendMessage(jid, { text: String(text) });
+  res.json({ ok: true });
 });
 
-// Painel estático
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use("/", express.static(path.join(__dirname, "..", "public")));
 
+const PORT = Number(process.env.PORT || 3334);
 app.listen(PORT, async () => {
   console.log(`✅ API rodando em http://localhost:${PORT}`);
 
-  sock = await startBot({
-    botName: BOT_NAME,
-    onConnectionUpdate: (st) => {
-      waStatus = st.status || "offline";
+  sock = await startWhatsApp({
+    onStatus: (st) => {
+      waStatus = st;
       console.log("📲 WhatsApp:", waStatus);
     }
   });

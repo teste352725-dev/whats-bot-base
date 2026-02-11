@@ -7,40 +7,92 @@ const STORE_FILE = path.join(DATA_DIR, "store.json");
 function ensure() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(STORE_FILE)) {
-    fs.writeFileSync(STORE_FILE, JSON.stringify({ humans: {}, tags: {} }, null, 2));
+    fs.writeFileSync(
+      STORE_FILE,
+      JSON.stringify({ contacts: {}, convos: {}, agents: {} }, null, 2)
+    );
   }
 }
 
-export function loadStore() {
+function read() {
   ensure();
-  return JSON.parse(fs.readFileSync(STORE_FILE, "utf-8"));
+  try {
+    return JSON.parse(fs.readFileSync(STORE_FILE, "utf8"));
+  } catch {
+    const fallback = { contacts: {}, convos: {}, agents: {} };
+    fs.writeFileSync(STORE_FILE, JSON.stringify(fallback, null, 2));
+    return fallback;
+  }
 }
 
-export function saveStore(store) {
+function write(data) {
   ensure();
-  fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2));
+  fs.writeFileSync(STORE_FILE, JSON.stringify(data, null, 2));
 }
 
-export function setHumanMode(jid, enabled) {
-  const store = loadStore();
-  store.humans[jid] = !!enabled;
-  saveStore(store);
-  return store.humans[jid];
+export function upsertContact(jid, patch) {
+  const db = read();
+  db.contacts[jid] = { ...(db.contacts[jid] || {}), ...patch };
+  write(db);
+  return db.contacts[jid];
 }
 
-export function isHumanMode(jid) {
-  const store = loadStore();
-  return !!store.humans[jid];
+export function addMessage({ tenant, jid, msg }) {
+  const db = read();
+  if (!db.convos[tenant]) db.convos[tenant] = {};
+  if (!db.convos[tenant][jid]) db.convos[tenant][jid] = { messages: [], updatedAt: Date.now() };
+  db.convos[tenant][jid].messages.push(msg);
+  db.convos[tenant][jid].updatedAt = Date.now();
+  write(db);
 }
 
-export function setTag(jid, tag) {
-  const store = loadStore();
-  store.tags[jid] = tag;
-  saveStore(store);
-  return tag;
+export function listConversations(tenant) {
+  const db = read();
+  const t = db.convos[tenant] || {};
+  const items = Object.entries(t).map(([jid, v]) => {
+    const last = v.messages[v.messages.length - 1];
+    const c = db.contacts[jid] || {};
+    return {
+      jid,
+      updatedAt: v.updatedAt,
+      lastText: last?.text || "",
+      displayName: c.name || c.phone || jid,
+      tag: c.tag || null
+    };
+  });
+  items.sort((a, b) => b.updatedAt - a.updatedAt);
+  return items;
 }
 
-export function getTag(jid) {
-  const store = loadStore();
-  return loadStore().tags[jid] || null;
+export function getConversation(tenant, jid) {
+  const db = read();
+  const c = db.contacts[jid] || {};
+  const conv = db.convos?.[tenant]?.[jid] || { messages: [] };
+  return {
+    header: {
+      jid,
+      phone: c.phone || jid,
+      displayName: c.name || c.phone || jid,
+      tag: c.tag || null,
+      pfpUrl: c.pfpUrl || null
+    },
+    items: conv.messages
+  };
+}
+
+export function setAgentName(username, name) {
+  const db = read();
+  db.agents[username] = { ...(db.agents[username] || {}), name };
+  write(db);
+  return name;
+}
+
+export function getAgentName(username) {
+  const db = read();
+  return db.agents?.[username]?.name || null;
+}
+
+export function getContact(jid) {
+  const db = read();
+  return db.contacts[jid] || null;
 }

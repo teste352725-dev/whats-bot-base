@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="/css/base.css">
+  <link id="theme" rel="stylesheet" href="/css/theme-efcol.css">
+  <title>Admin</title>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div>
+        <h2 style="margin:0">Admin (Você)</h2>
+        <div class="badge" id="me">carregando...</div>
+      </div>
+      <div class="row" style="max-width:520px">
+        <select class="input" id="tenant"></select>
+        <button class="btn secondary" id="logout">Sair</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card list" id="left"></div>
+
+      <div class="card" style="display:flex; flex-direction:column;">
+        <div style="padding:12px 16px; border-bottom:1px solid var(--border)">
+          <div id="chatTitle" style="font-weight:900">Selecione uma conversa</div>
+          <div id="chatSub" class="badge" style="display:inline-block; margin-top:8px">—</div>
+        </div>
+
+        <div class="chat" id="chat"></div>
+
+        <div style="padding:12px; border-top:1px solid var(--border)">
+          <div class="row">
+            <input class="input" id="agentName" placeholder="Seu nome (ex: João)" />
+            <button class="btn secondary" id="saveAgent">Salvar</button>
+          </div>
+          <div style="height:10px"></div>
+          <div class="row">
+            <input class="input" id="text" placeholder="Digite a mensagem..." />
+            <button class="btn" id="send">Enviar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+let current = { tenant:null, jid:null };
+
+function setTheme(tenant){
+  const map = {
+    efcol: "/css/theme-efcol.css",
+    alef: "/css/theme-alef.css",
+    sejaprofeta: "/css/theme-sejaprofeta.css"
+  };
+  document.getElementById("theme").href = map[tenant] || "/css/theme-efcol.css";
+}
+
+async function api(path, opts){
+  const r = await fetch(path, { headers: { "Content-Type":"application/json" }, ...opts });
+  const j = await r.json().catch(()=>null);
+  if(!r.ok) throw new Error(j?.error || "Erro");
+  return j;
+}
+
+async function boot(){
+  const me = await api("/api/me");
+  document.getElementById("me").textContent = `${me.username} • ${me.role}`;
+  const sel = document.getElementById("tenant");
+  sel.innerHTML = me.tenants.map(t => `<option value="${t}">${t.toUpperCase()}</option>`).join("");
+  current.tenant = sel.value;
+  setTheme(current.tenant);
+  sel.onchange = async () => {
+    current.tenant = sel.value;
+    current.jid = null;
+    setTheme(current.tenant);
+    await loadConvos();
+    document.getElementById("chat").innerHTML = "";
+    document.getElementById("chatTitle").textContent = "Selecione uma conversa";
+  };
+  await loadConvos();
+  setInterval(loadConvos, 2500);
+  setInterval(()=> current.jid && loadChat(), 2000);
+}
+
+function renderMsg(m){
+  const who = m.from === "agent" ? (m.agentName || "Atendente") : (m.contactName || "Cliente");
+  const time = new Date(m.ts).toLocaleString();
+  return `
+    <div class="msg">
+      <div class="who">${escapeHtml(who)}</div>
+      <div>${escapeHtml(m.text)}</div>
+      <div class="meta">${escapeHtml(m.from)} • ${time}</div>
+    </div>`;
+}
+
+function escapeHtml(s){ return String(s||"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+async function loadConvos(){
+  const left = document.getElementById("left");
+  const data = await api(`/api/conversations?tenant=${encodeURIComponent(current.tenant)}`);
+  left.innerHTML = data.items.map(c => `
+    <div class="item ${c.jid===current.jid?'active':''}" data-jid="${c.jid}">
+      <div style="font-weight:800">${escapeHtml(c.displayName)}</div>
+      <div style="color:var(--muted); font-size:12px">${escapeHtml(c.lastText || "")}</div>
+      <div style="margin-top:8px" class="badge">${escapeHtml(c.tag || "sem triagem")}</div>
+    </div>
+  `).join("");
+
+  left.querySelectorAll(".item").forEach(el=>{
+    el.onclick = async () => {
+      current.jid = el.dataset.jid;
+      await loadChat();
+    };
+  });
+}
+
+async function loadChat(){
+  const data = await api(`/api/messages?tenant=${encodeURIComponent(current.tenant)}&jid=${encodeURIComponent(current.jid)}`);
+  document.getElementById("chatTitle").textContent = data.header.displayName;
+  document.getElementById("chatSub").textContent = `${data.header.phone} • ${data.header.tag || "sem triagem"}`;
+  document.getElementById("chat").innerHTML = data.items.map(renderMsg).join("");
+  document.getElementById("chat").scrollTop = 999999;
+}
+
+document.getElementById("saveAgent").onclick = async () => {
+  const name = document.getElementById("agentName").value.trim();
+  if(!name) return alert("Digite seu nome.");
+  await api("/api/agent-name", { method:"POST", body: JSON.stringify({ name }) });
+  alert("Nome salvo.");
+};
+
+document.getElementById("send").onclick = async () => {
+  if(!current.jid) return alert("Selecione uma conversa.");
+  const text = document.getElementById("text").value.trim();
+  if(!text) return;
+  await api("/api/send", { method:"POST", body: JSON.stringify({ tenant: current.tenant, jid: current.jid, text }) });
+  document.getElementById("text").value = "";
+  await loadChat();
+};
+
+document.getElementById("logout").onclick = async () => {
+  await api("/api/logout", { method:"POST" });
+  location.href = "/login.html";
+};
+
+boot().catch(e=>alert(e.message));
+</script>
+</body>
+</html>
