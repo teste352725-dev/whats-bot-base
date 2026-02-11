@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard • Whats Bot</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="dash">
+  <header class="topbar">
+    <div class="left">
+      <div class="logo small">WB</div>
+      <div class="title">
+        <strong>Atendimento</strong>
+        <span id="waBadge" class="badge">WhatsApp: ...</span>
+      </div>
+    </div>
+
+    <div class="right">
+      <button id="logoutBtn" class="btn ghost">Sair</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <input id="search" placeholder="Buscar..." />
+      </div>
+      <div id="ticketList" class="tickets"></div>
+    </aside>
+
+    <section class="chat">
+      <div class="chat-head">
+        <div>
+          <div id="chatTitle" class="chat-title">Selecione uma conversa</div>
+          <div id="chatSub" class="chat-sub">—</div>
+        </div>
+
+        <div class="chat-actions">
+          <button id="humanBtn" class="btn">Modo humano</button>
+          <button id="closeBtn" class="btn danger">Fechar</button>
+        </div>
+      </div>
+
+      <div id="messages" class="messages"></div>
+
+      <form id="sendForm" class="composer">
+        <input id="text" placeholder="Digite sua mensagem..." autocomplete="off" />
+        <button class="btn primary" type="submit">Enviar</button>
+      </form>
+    </section>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
