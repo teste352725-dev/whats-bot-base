@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="/css/base.css">
+  <title>Omnichannel Suite • Login</title>
+</head>
+<body class="theme-efcol">
+  <div class="login-container">
+    <div class="login-card">
+      <div style="margin-bottom:24px; text-align:center">
+        <h2 style="margin:0; color:var(--primary)">Acesso Omnichannel</h2>
+        <span class="badge" style="margin-top:8px">Sistema Seguro</span>
+      </div>
+
+      <label style="font-size:12px; color:var(--text-muted)">Usuário</label>
+      <input class="input" id="u" placeholder="admin ou atendente" style="margin-bottom:12px" />
+
+      <label style="font-size:12px; color:var(--text-muted)">Senha</label>
+      <input class="input" id="p" type="password" placeholder="••••••" style="margin-bottom:20px" />
+
+      <button class="btn" id="login" style="width:100%">Entrar no Sistema</button>
+      <p id="err" style="color:#ff6b6b; font-size:12px; text-align:center; margin-top:12px"></p>
+    </div>
+  </div>
+
+<script>
+async function api(path, opts){
+  const r = await fetch(path, { headers: { "Content-Type":"application/json" }, ...opts });
+  const j = await r.json().catch(()=>null);
+  if(!r.ok) throw new Error(j?.error || "Erro");
+  return j;
+}
+
+document.getElementById("login").onclick = async () => {
+  const username = document.getElementById("u").value.trim();
+  const password = document.getElementById("p").value.trim();
+  const err = document.getElementById("err");
+  err.textContent = "";
+  try{
+    const res = await api("/api/login", { method:"POST", body: JSON.stringify({ username, password }) });
+    location.href = res.role === "admin" ? "/admin.html" : "/dashboard.html";
+  }catch(e){
+    err.textContent = e.message;
+  }
+};
+
+document.getElementById("p").onkeypress = (e) => {
+  if (e.key === "Enter") document.getElementById("login").click();
+};
+</script>
+</body>
+</html>

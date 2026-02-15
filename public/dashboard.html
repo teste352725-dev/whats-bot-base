@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="/css/base.css">
+  <title>Omnichannel Suite • Dashboard</title>
+</head>
+<body class="theme-efcol">
+<div class="app-shell">
+  <nav class="sidebar">
+    <div class="brand"><div style="width:24px;height:24px;background:var(--primary);border-radius:4px"></div>Atendimento</div>
+    <div class="nav-item active">💬 Meus Chats</div>
+    <div class="nav-item">📁 Arquivados</div>
+    <div class="nav-item">⭐ Performance</div>
+    <div class="spacer"></div>
+    <button class="btn secondary" id="logout" style="width:100%">Sair</button>
+  </nav>
+
+  <main class="main-content">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:10px"><h3 id="title" style="margin:0">Dashboard</h3><span class="badge" style="background:#4caf50;color:#000;border:none">online</span></div>
+      <div id="me" style="font-size:13px;color:var(--text-muted)">carregando...</div>
+    </header>
+
+    <div class="dashboard-view">
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Meus Atendimentos</div><div id="stTotal" class="stat-value">0</div></div>
+        <div class="stat-card"><div class="stat-label">Tenant</div><div id="stTenant" class="stat-value">-</div></div>
+        <div class="stat-card"><div class="stat-label">Selecionada</div><div id="stSel" class="stat-value">0</div></div>
+      </div>
+
+      <div class="chat-layout">
+        <div class="conversation-list">
+          <div style="padding:16px;border-bottom:1px solid var(--border)"><input class="input" id="q" placeholder="Buscar conversa..." style="padding:8px 12px;font-size:13px"></div>
+          <div id="conv-list" style="overflow-y:auto;flex:1"></div>
+        </div>
+
+        <div class="chat-window">
+          <div class="chat-header">
+            <div id="chat-title" style="font-weight:800;font-size:16px">Selecione</div>
+            <div id="chat-sub" style="color:var(--text-muted);font-size:12px;margin-top:4px">—</div>
+          </div>
+          <div class="messages-area" id="msg-area"><div style="text-align:center;color:var(--text-muted);margin-top:50px">Selecione uma conversa para iniciar.</div></div>
+          <div class="input-area">
+            <div style="margin-bottom:8px;display:flex;gap:10px;overflow-x:auto">
+              <div class="badge" onclick="setInput('Olá, tudo bem?')" style="cursor:pointer;border-color:var(--primary)">Olá, tudo bem?</div>
+              <div class="badge" onclick="setInput('Aguarde um momento')" style="cursor:pointer;border-color:var(--primary)">Aguarde um momento</div>
+            </div>
+            <div class="row" style="margin-bottom:8px">
+              <input class="input" id="agentName" placeholder="Seu nome (ex: Gabriela)" />
+              <button class="btn secondary" id="saveAgent">Salvar</button>
+            </div>
+            <div class="row">
+              <input class="input" id="msg-input" placeholder="Digite sua mensagem..." />
+              <button class="btn" id="send">Enviar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+let current={tenant:null,jid:null,convs:[]};
+function setTheme(tenant){ document.body.className=`theme-${tenant}`; }
+function esc(s){ return String(s||"").replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+async function api(path,opts){ const r=await fetch(path,{headers:{"Content-Type":"application/json"},...opts}); const j=await r.json().catch(()=>null); if(!r.ok) throw new Error(j?.error||'Erro'); return j; }
+function setInput(t){ document.getElementById('msg-input').value=t; document.getElementById('msg-input').focus(); }
+
+function renderConvs(){
+  const q=document.getElementById('q').value.trim().toLowerCase();
+  const list=current.convs.filter(c=>!q||(c.displayName||'').toLowerCase().includes(q)||(c.jid||'').includes(q));
+  document.getElementById('conv-list').innerHTML=list.map(c=>`<div class="list-item ${c.jid===current.jid?'active':''}" data-jid="${c.jid}"><div style="display:flex;justify-content:space-between"><strong>${esc(c.displayName)}</strong><span style="font-size:10px;color:var(--text-muted)">${new Date(c.updatedAt||Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span></div><div style="font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.lastText||'')}</div><div style="margin-top:6px"><span class="badge">${esc(c.tag||'sem triagem')}</span></div></div>`).join('');
+  document.querySelectorAll('.list-item').forEach(el=>el.onclick=async()=>{current.jid=el.dataset.jid; await loadChat(); renderConvs();});
+  document.getElementById('stTotal').textContent=String(current.convs.length);
+  document.getElementById('stTenant').textContent=(current.tenant||'-').toUpperCase();
+  document.getElementById('stSel').textContent=current.jid?'1':'0';
+}
+
+async function loadConvs(){ const data=await api(`/api/conversations?tenant=${encodeURIComponent(current.tenant)}`); current.convs=data.items||[]; renderConvs(); }
+async function loadChat(){ if(!current.jid) return; const data=await api(`/api/messages?tenant=${encodeURIComponent(current.tenant)}&jid=${encodeURIComponent(current.jid)}`); document.getElementById('chat-title').textContent=data.header.displayName; document.getElementById('chat-sub').textContent=`${data.header.phone} • ${data.header.tag||'sem triagem'}`; document.getElementById('msg-area').innerHTML=(data.items||[]).map(m=>`<div class="msg ${m.from==='agent'?'agent':'client'}"><div>${esc(m.text||'')}</div><span style="font-size:10px;opacity:.7;display:block;text-align:right;margin-top:4px">${new Date(m.ts||Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span></div>`).join(''); document.getElementById('msg-area').scrollTop=999999; }
+
+async function boot(){
+  const me=await api('/api/me');
+  document.getElementById('me').textContent=`${me.username} • ${me.role}`;
+  current.tenant=(me.tenants||[])[0];
+  document.getElementById('title').textContent=`Dashboard • ${(current.tenant||'').toUpperCase()}`;
+  setTheme(current.tenant);
+  document.getElementById('q').oninput=renderConvs;
+  document.getElementById('saveAgent').onclick=async()=>{const name=document.getElementById('agentName').value.trim(); if(!name) return alert('Digite seu nome.'); await api('/api/agent-name',{method:'POST', body:JSON.stringify({name})}); alert('Nome salvo.');};
+  document.getElementById('send').onclick=async()=>{if(!current.jid) return alert('Selecione uma conversa.'); const text=document.getElementById('msg-input').value.trim(); if(!text) return; await api('/api/send',{method:'POST', body:JSON.stringify({tenant:current.tenant, jid:current.jid, text})}); document.getElementById('msg-input').value=''; await loadChat(); await loadConvs();};
+  document.getElementById('msg-input').onkeypress=(e)=>{if(e.key==='Enter') document.getElementById('send').click();};
+  document.getElementById('logout').onclick=async()=>{await api('/api/logout',{method:'POST'}); location.href='/login.html';};
+  await loadConvs();
+  setInterval(loadConvs,2500);
+  setInterval(()=>current.jid&&loadChat(),2000);
+}
+boot().catch(e=>alert(e.message));
+</script>
+</body>
+</html>
